@@ -240,7 +240,7 @@ export const getPurchaseOrdersForBillingService = async () => {
   })
     .populate(
       "vendor",
-      "vendorName phone email gstNumber address city state pincode"
+      "vendorName phone email gstNumber address city state pincode bankDetails"
     )
     .populate("items.product", "name sku partName partSku")
     .sort({ receivedAt: -1 });

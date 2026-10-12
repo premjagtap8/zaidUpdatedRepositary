@@ -233,6 +233,21 @@ export const createPurchaseService = async (
         vendorState:
           data.vendorState || "",
 
+        // NEW (optional): bank details snapshot
+        vendorBankDetails: {
+          accountHolderName:
+            data.vendorBankDetails?.accountHolderName || "",
+
+          bankName:
+            data.vendorBankDetails?.bankName || "",
+
+          accountNumber:
+            data.vendorBankDetails?.accountNumber || "",
+
+          ifscCode:
+            data.vendorBankDetails?.ifscCode || ""
+        },
+
         purchaseOrderNumber:
           linkedPurchaseOrderNumber,
 

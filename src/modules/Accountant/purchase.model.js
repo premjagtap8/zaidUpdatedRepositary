@@ -312,6 +312,31 @@ const purchaseSchema = new mongoose.Schema(
       default: ""
     },
 
+    // NEW (optional): vendor bank details snapshot for the invoice
+    vendorBankDetails: {
+      accountHolderName: {
+        type: String,
+        trim: true,
+        default: ""
+      },
+      bankName: {
+        type: String,
+        trim: true,
+        default: ""
+      },
+      accountNumber: {
+        type: String,
+        trim: true,
+        default: ""
+      },
+      ifscCode: {
+        type: String,
+        trim: true,
+        uppercase: true,
+        default: ""
+      }
+    },
+
     // NEW (optional): PO number saved as text (purchaseOrder stays an id)
     purchaseOrderNumber: {
       type: String,
