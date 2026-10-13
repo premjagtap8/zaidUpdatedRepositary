@@ -15,56 +15,78 @@ import Order
 import Repair from "../repair/repair.model.js";
 import Rental from "../rental/rental.model.js";
 
+
 // =======================================
-// CREATE RAZORPAY ORDER
+// CHANGE: REPLACED FUNCTION
+// CREATE RAZORPAY ORDER + PENDING PAYMENT
+//
+// Before: received (amount, receipt) from the
+// client and only created the Razorpay order.
+//
+// Now: receives the DB order + logged-in user.
+// The amount comes from order.totalAmount (not
+// from the client), and the Payment document
+// is created here with the razorpayOrderId
+// saved on it. This link is what stops replay.
 // =======================================
 
-export const createRazorpayPaymentOrder = async (
-    amount,
-    receipt
-) => {
+export const createRazorpayPaymentOrder = async ({
+    order,
+    userId
+}) => {
+
+    // CHANGE: amount always comes from the DB order
+    const amount = Number(
+        Number(order.finalAmount).toFixed(2)
+    );
 
     const razorpayOrder =
         await createRazorpayOrder({
             amount,
-            receipt
+            receipt: `order_${order._id}`
         });
 
-    return razorpayOrder;
+    // CHANGE: create the Payment now and link it
+    // to this Razorpay order
+    const payment = await createPayment({
+        user: userId,
+        paymentFor: "ORDER",
+        referenceId: order._id,
+        amount,
+        paymentMethod: "UPI",
+        gateway: "RAZORPAY",
+        razorpayOrderId: razorpayOrder.id
+    });
+
+    return {
+        razorpayOrder,
+        payment
+    };
 };
 
 
 // =======================================
+// CHANGE: REPLACED FUNCTION
 // VERIFY RAZORPAY PAYMENT
+//
+// Before: found the Payment using a paymentId
+// sent by the frontend, so an old signature
+// could mark any new payment as paid.
+//
+// Now: takes only the 3 Razorpay values and
+// finds the Payment using the signed
+// razorpayOrderId.
 // =======================================
 
 export const verifyRazorpayPaymentService = async ({
-    paymentId,
     razorpayOrderId,
     razorpayPaymentId,
     razorpaySignature
 }) => {
 
     // ==========================================
-    // 1. FIND PAYMENT
-    // ==========================================
-
-    const payment =
-        await paymentRepository.getPaymentById(
-            paymentId
-        );
-
-    if (!payment) {
-
-        throw new Error(
-            "Payment not found"
-        );
-
-    }
-
-
-    // ==========================================
-    // 2. VERIFY RAZORPAY SIGNATURE
+    // 1. VERIFY RAZORPAY SIGNATURE FIRST
+    // (CHANGE: moved before any DB lookup)
     // ==========================================
 
     const isValid =
@@ -78,7 +100,6 @@ export const verifyRazorpayPaymentService = async ({
 
         });
 
-
     if (!isValid) {
 
         throw new Error(
@@ -87,28 +108,41 @@ export const verifyRazorpayPaymentService = async ({
 
     }
 
-
     console.log(
         "SIGNATURE VERIFY SUCCESS"
     );
 
 
     // ==========================================
-    // 3. UPDATE PAYMENT = SUCCESS
+    // 2. FIND PAYMENT BY RAZORPAY ORDER ID
+    // (CHANGE: was findById(paymentId) from client)
+    // ==========================================
+
+    const payment =
+        await paymentRepository.getPaymentByRazorpayOrderId(
+            razorpayOrderId
+        );
+
+    if (!payment) {
+
+        throw new Error(
+            "Payment not found for this Razorpay order"
+        );
+
+    }
+
+
+    // ==========================================
+    // 3. ATOMICALLY MARK PAYMENT = SUCCESS
+    // (CHANGE: only succeeds if not already paid)
     // ==========================================
 
     const updatedPayment =
-        await paymentRepository.updatePaymentStatus(
+        await paymentRepository.markPaymentSuccessIfNotPaid(
 
-            paymentId,
-
-            PAYMENT_STATUS.SUCCESS,
+            payment._id,
 
             razorpayPaymentId,
-
-            razorpayPaymentId,
-
-            "RAZORPAY",
 
             {
 
@@ -118,12 +152,29 @@ export const verifyRazorpayPaymentService = async ({
 
                 razorpaySignature
 
-            },
-
-            ""
+            }
 
         );
 
+
+    // CHANGE: already processed. Return it without
+    // changing anything (safe for genuine retries).
+    if (!updatedPayment) {
+
+        if (
+            payment.paymentStatus ===
+            PAYMENT_STATUS.SUCCESS
+        ) {
+
+            return payment;
+
+        }
+
+        throw new Error(
+            "Payment cannot be verified in its current state"
+        );
+
+    }
 
     console.log(
         "PAYMENT STATUS = SUCCESS"
@@ -131,12 +182,12 @@ export const verifyRazorpayPaymentService = async ({
 
 
     // ==========================================
-    // 4. GET ORDER ID
+    // 4. FIND ORDER
+    // (CHANGE: uses updatedPayment.referenceId)
     // ==========================================
 
     const orderId =
-        payment.referenceId;
-
+        updatedPayment.referenceId;
 
     if (!orderId) {
 
@@ -146,16 +197,10 @@ export const verifyRazorpayPaymentService = async ({
 
     }
 
-
-    // ==========================================
-    // 5. FIND ORDER
-    // ==========================================
-
     const order =
         await Order.findById(
             orderId
         );
-
 
     if (!order) {
 
@@ -167,7 +212,7 @@ export const verifyRazorpayPaymentService = async ({
 
 
     // ==========================================
-    // 6. UPDATE ORDER = PAID
+    // 5. UPDATE ORDER = PAID
     // ==========================================
 
     order.paymentStatus = "PAID";
@@ -175,9 +220,13 @@ export const verifyRazorpayPaymentService = async ({
     order.paymentId =
         razorpayPaymentId;
 
+    // CHANGE: online orders are now created as PENDING, so a real payment
+    // must also confirm the order and record the amount paid.
+    order.orderStatus = "CONFIRMED";
+
+    order.paidAmount = updatedPayment.amount;
 
     await order.save();
-
 
     console.log(
         "ORDER PAYMENT STATUS = PAID"
@@ -185,7 +234,7 @@ export const verifyRazorpayPaymentService = async ({
 
 
     // ==========================================
-    // 7. RETURN PAYMENT
+    // 6. RETURN PAYMENT
     // ==========================================
 
     return updatedPayment;
@@ -195,43 +244,7 @@ export const verifyRazorpayPaymentService = async ({
 
 // =======================================
 // CREATE PAYMENT
-// =======================================
-
-// export const createPayment = async (
-//     paymentData
-// ) => {
-
-//     paymentData.receiptNumber =
-//         await generateReceiptNumber();
-
-//     if (!paymentData.currency) {
-//         paymentData.currency = "INR";
-//     }
-
-//     return await paymentRepository.createPayment(
-//         paymentData
-//     );
-// };
-
-// export const createPayment = async (
-//     paymentData
-// ) => {
-
-//     paymentData.receiptNumber =
-//         await generateReceiptNumber();
-
-//     if (!paymentData.currency) {
-//         paymentData.currency = "INR";
-//     }
-
-//     return await paymentRepository.createPayment(
-//         paymentData
-//     );
-// };
-
-
-// =======================================
-// CREATE PAYMENT
+// (unchanged)
 // =======================================
 
 export const createPayment = async (
@@ -391,6 +404,7 @@ export const createPayment = async (
     );
 };
 
+
 // =======================================
 // GENERATE RECEIPT NUMBER
 // =======================================
@@ -429,7 +443,6 @@ export const getPaymentById = async (
 
     return payment;
 };
-
 
 
 // =======================================
@@ -474,6 +487,7 @@ export const getAllPayments = async () => {
 
 // =======================================
 // MARK PAYMENT SUCCESS
+// (unchanged; the route to this is for tomorrow)
 // =======================================
 
 export const markPaymentSuccess = async (
@@ -585,9 +599,9 @@ export const getPaymentCount = async () => {
 };
 
 
-
 // =====================================================
 // DETERMINE SALE SOURCE
+// (unchanged)
 // =====================================================
 
 const determineSaleSource = async (

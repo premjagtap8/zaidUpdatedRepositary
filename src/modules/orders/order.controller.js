@@ -67,8 +67,8 @@ export const createOrder = async (
 
           title:
             item.title,
-        //      couponCode:
-        // req.body.couponCode || "",  
+          //      couponCode:
+          // req.body.couponCode || "",  
 
           quantity:
             Number(item.quantity),
@@ -120,42 +120,43 @@ export const createOrder = async (
 
     const orderData = {
 
-    orderItems,
+      orderItems,
 
-    shippingAddress,
+      shippingAddress,
 
-    totalAmount:
+      totalAmount:
         Number(req.body.totalAmount),
 
- couponCode:
-        req.body.couponCode || "",  
+      couponCode:
+        req.body.couponCode || "",
 
 
-    paymentMethod:
+      paymentMethod:
         req.body.paymentMethod || "CASH",
 
 
-    paymentStatus:
-        "PAID",
+      // CHANGE: online orders start unpaid. Only walk-in (counter) orders
+      // are saved as paid and confirmed. Verify sets PAID for online orders.
+      paymentStatus:
+        orderSource === "WALK_IN" ? "PAID" : "PENDING",
+
+      orderStatus:
+        orderSource === "WALK_IN" ? "CONFIRMED" : "PENDING",
 
 
-    orderStatus:
-        "CONFIRMED",
+      orderSource,
 
 
-    orderSource,
-
-
-    user:
+      user:
         userId,
 
 
-    soldBy:
+      soldBy:
         orderSource === "WALK_IN"
-            ? userId
-            : null
+          ? userId
+          : null
 
-};
+    };
 
 
     console.log(
@@ -349,17 +350,17 @@ export const updateOrderStatus =
 
 
       const order =
-await orderService.updateOrderStatus(
+        await orderService.updateOrderStatus(
 
-  req.params.id,
+          req.params.id,
 
-  req.body.status,
+          req.body.status,
 
-  req.user?._id || null,
+          req.user?._id || null,
 
-  req.body.message || ""
+          req.body.message || ""
 
-);
+        );
 
       return res.status(200).json({
 

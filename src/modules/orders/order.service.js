@@ -35,6 +35,11 @@ import {
 
 const GST_PERCENTAGE = 18; // apne checkout wala GST % yaha rakho
 
+
+// CHANGE: fixed shipping for online orders. Set by the backend only,
+// never read from the request.
+const ONLINE_SHIPPING_CHARGE = 100;
+
 const round2 = (value) =>
   Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
@@ -85,9 +90,9 @@ const buildSecureOrderItems = async (rawItems, customerType) => {
 
     const originalPrice = Number(
       (isBusiness ? pricing.wholesalePrice : pricing.retailPrice) ||
-        pricing.retailPrice ||
-        pricing.sellingPrice ||
-        0
+      pricing.retailPrice ||
+      pricing.sellingPrice ||
+      0
     );
 
     if (originalPrice <= 0) {
@@ -154,13 +159,13 @@ const buildSecureOrderItems = async (rawItems, customerType) => {
 
       appliedOffer: offer
         ? {
-            offerId: offer._id,
-            title: offer.title,
-            discountType:
-              offer.discountType,
-            discountValue:
-              offer.discountValue
-          }
+          offerId: offer._id,
+          title: offer.title,
+          discountType:
+            offer.discountType,
+          discountValue:
+            offer.discountValue
+        }
         : null,
 
       imageUrl:
@@ -196,69 +201,95 @@ export const createOrder = async (
   // GET CUSTOMER
   // ==========================================
 
- // ==========================================
-// GET CUSTOMER
-// ==========================================
-
-// const customer = await User.findById(
-//   orderData.user
-// ).select(
-//   "customerType role"
-// );
-
-// if (!customer) {
-//   throw new Error(
-//     "Customer not found."
-//   );
-// }
-
-
-// ==========================================
-// CUSTOMER / WALK-IN ORDER HANDLING
-// ==========================================
-
-const isWalkIn =
-  orderData.orderSource === "WALK_IN";
-
-let customer;
-
-if (isWalkIn) {
-
-  // Walk-In order staff create karta hai,
-  // isliye customer user ki zarurat nahi hai.
-  if (!createdBy) {
-    throw new Error(
-      "Authenticated staff user is required for walk-in order."
-    );
-  }
-
-  // Order schema me user required ho sakta hai,
-  // isliye authenticated staff ko reference ke liye use karenge.
-  orderData.user =
-    orderData.user || createdBy;
-
-  // Walk-In ko Personal/B2C pricing ke saath process karo.
-  customer = {
-    role: "CUSTOMER",
-    customerType: "PERSONAL",
-  };
-
-} else {
-
   // ==========================================
-  // EXISTING ONLINE CUSTOMER VALIDATION
+  // GET CUSTOMER
   // ==========================================
 
-  customer = await User.findById(
-    orderData.user
-  ).select(
-    "customerType role"
-  );
+  // const customer = await User.findById(
+  //   orderData.user
+  // ).select(
+  //   "customerType role"
+  // );
 
-  if (!customer) {
-    throw new Error(
-      "Customer not found."
+  // if (!customer) {
+  //   throw new Error(
+  //     "Customer not found."
+  //   );
+  // }
+
+
+  // ==========================================
+  // CUSTOMER / WALK-IN ORDER HANDLING
+  // ==========================================
+
+  const isWalkIn =
+    orderData.orderSource === "WALK_IN";
+
+  let customer;
+
+  if (isWalkIn) {
+
+    // Walk-In order staff create karta hai,
+    // isliye customer user ki zarurat nahi hai.
+    if (!createdBy) {
+      throw new Error(
+        "Authenticated staff user is required for walk-in order."
+      );
+    }
+
+    // Order schema me user required ho sakta hai,
+    // isliye authenticated staff ko reference ke liye use karenge.
+    orderData.user =
+      orderData.user || createdBy;
+
+    // Walk-In ko Personal/B2C pricing ke saath process karo.
+    customer = {
+      role: "CUSTOMER",
+      customerType: "PERSONAL",
+    };
+
+  } else {
+
+    // ==========================================
+    // EXISTING ONLINE CUSTOMER VALIDATION
+    // ==========================================
+
+    customer = await User.findById(
+      orderData.user
+    ).select(
+      "customerType role"
     );
+
+    if (!customer) {
+      throw new Error(
+        "Customer not found."
+      );
+    }
+
+    // ==========================================
+    // CUSTOMER CHECK
+    // ==========================================
+
+    if (customer.role !== "CUSTOMER") {
+      throw new Error(
+        "Only customers can create this order."
+      );
+    }
+
+    // ==========================================
+    // CUSTOMER TYPE CHECK
+    // ==========================================
+
+    if (
+      !["PERSONAL", "BUSINESS"].includes(
+        customer.customerType
+      )
+    ) {
+      throw new Error(
+        "Customer type is not configured properly."
+      );
+    }
+
   }
 
   // ==========================================
@@ -285,40 +316,14 @@ if (isWalkIn) {
     );
   }
 
-}
+  // ==========================================
+  // AUTO DETERMINE ORDER TYPE
+  // ==========================================
 
-// ==========================================
-// CUSTOMER CHECK
-// ==========================================
-
-if (customer.role !== "CUSTOMER") {
-  throw new Error(
-    "Only customers can create this order."
-  );
-}
-
-// ==========================================
-// CUSTOMER TYPE CHECK
-// ==========================================
-
-if (
-  !["PERSONAL", "BUSINESS"].includes(
-    customer.customerType
-  )
-) {
-  throw new Error(
-    "Customer type is not configured properly."
-  );
-}
-
-// ==========================================
-// AUTO DETERMINE ORDER TYPE
-// ==========================================
-
-orderData.orderType =
-  customer.customerType === "BUSINESS"
-    ? "B2B"
-    : "B2C";
+  orderData.orderType =
+    customer.customerType === "BUSINESS"
+      ? "B2B"
+      : "B2C";
   // ==========================================
   // EXISTING CODE
   // ==========================================
@@ -349,7 +354,7 @@ orderData.orderType =
   //   totalAmount;
 
 
-    const {
+  const {
     secureItems,
     totalAmount,
     subtotal,
@@ -393,7 +398,7 @@ orderData.orderType =
         result.discountAmount || 0
       );
 
-      
+
 
 
     couponData =
@@ -421,7 +426,7 @@ orderData.orderType =
   }
 
 
-  
+
 
   // ====================================================
   // FINAL AMOUNT
@@ -434,7 +439,7 @@ orderData.orderType =
   //   );
 
 
-    // ====================================================
+  // ====================================================
   // FINAL AMOUNT (offer + coupon + GST + shipping)
   // ====================================================
 
@@ -448,8 +453,12 @@ orderData.orderType =
   const gstAmount =
     round2((taxableAmount * gstPercentage) / 100);
 
+  // CHANGE: was Math.max(Number(orderData.shippingCharge) || 0, 0), which
+  // was always 0 because the controller never sends it.
+  // Online orders get the fixed shipping charge. Walk-in (counter) sales
+  // have no shipping.
   const shippingCharge =
-    Math.max(Number(orderData.shippingCharge) || 0, 0);
+    isWalkIn ? 0 : ONLINE_SHIPPING_CHARGE;
 
   const otherCharges =
     Math.max(Number(orderData.otherCharges) || 0, 0);
@@ -468,6 +477,13 @@ orderData.orderType =
       shippingCharge +
       otherCharges
     );
+
+  // CHANGE: walk-in (counter) orders are saved as PAID by the controller,
+  // so the paid amount must be the full final amount. Before this, it
+  // stayed 0, and the invoice showed Paid 0 / Balance = full amount.
+  // Online orders stay 0 until the payment is verified.
+  orderData.paidAmount =
+    isWalkIn ? orderData.finalAmount : 0;
 
   // ====================================================
   // WALK-IN STOCK CHECK
@@ -505,8 +521,7 @@ orderData.orderType =
       ) {
 
         throw new Error(
-          `Invalid quantity for ${
-            item.title || "product"
+          `Invalid quantity for ${item.title || "product"
           }`
         );
 
@@ -522,9 +537,8 @@ orderData.orderType =
       if (!inventory) {
 
         throw new Error(
-          `Inventory not found for ${
-            item.title ||
-            item.product
+          `Inventory not found for ${item.title ||
+          item.product
           }`
         );
 
@@ -555,11 +569,9 @@ orderData.orderType =
 
         throw new Error(
 
-          `${
-            item.title ||
-            "Product"
-          } has only ${
-            availableStock
+          `${item.title ||
+          "Product"
+          } has only ${availableStock
           } stock available`
 
         );
@@ -765,7 +777,7 @@ orderData.orderType =
 
         message:
           orderForTracking.orderSource ===
-          "WALK_IN"
+            "WALK_IN"
 
             ? "Walk-in order created"
 
@@ -1031,8 +1043,8 @@ export const updateOrderStatus =
         const lastHistory =
           history.length > 0
             ? history[
-                history.length - 1
-              ]
+            history.length - 1
+            ]
             : null;
 
 
@@ -1107,10 +1119,10 @@ export const updateOrderStatus =
             RETURN_REQUESTED:
               "Your return request has been received.",
 
-             RETURNED:
-               "Your order has been returned successfully."
+            RETURNED:
+              "Your order has been returned successfully."
 
-              
+
 
           };
 
@@ -1465,14 +1477,14 @@ const getDefaultTrackingMessage =
           "Your order has been cancelled."
         );
 
-        case "RETURN_REQUESTED":
+      case "RETURN_REQUESTED":
 
-           return "Your return request has been received.";
+        return "Your return request has been received.";
 
 
       case "RETURNED":
 
-          return "Your order has been returned successfully.";
+        return "Your order has been returned successfully.";
 
 
       default:
@@ -1486,33 +1498,33 @@ const getDefaultTrackingMessage =
   };
 
 
-  // ======================================================
+// ======================================================
 // FIND ORDER FOR PRODUCT REVIEW
 // ======================================================
 
 export const findOrderForReview = async (
-    orderId,
-    userId,
-    productId
+  orderId,
+  userId,
+  productId
 ) => {
 
-    return await Order.findOne({
+  return await Order.findOne({
 
-        _id: orderId,
+    _id: orderId,
 
-        // Order isi customer ka hona chahiye
-        user: userId,
+    // Order isi customer ka hona chahiye
+    user: userId,
 
-        // Sirf delivered order review kar sakta hai
-        orderStatus: "DELIVERED",
+    // Sirf delivered order review kar sakta hai
+    orderStatus: "DELIVERED",
 
-        // Product order ke andar hona chahiye
-        orderItems: {
-            $elemMatch: {
-                product: productId
-            }
-        }
+    // Product order ke andar hona chahiye
+    orderItems: {
+      $elemMatch: {
+        product: productId
+      }
+    }
 
-    });
+  });
 
 };

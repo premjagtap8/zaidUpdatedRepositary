@@ -23,31 +23,48 @@ const paymentSchema = new mongoose.Schema(
         },
 
         // =====================================================
-// SALE SOURCE
-// ONLINE / WALK_IN
-// =====================================================
-saleSource: {
-    type: String,
-    enum: ["ONLINE", "WALK_IN"],
-    default: "ONLINE",
-    index: true
-},
-          // Payment Type
-paymentType: {
-    type: String,
-    enum: [
-        "SECURITY_DEPOSIT",
-        "RENTAL_MONTHLY",
-        "DAMAGE_CHARGE",
-        "OTHER"
-    ],
-    default: null
-},
+        // SALE SOURCE
+        // ONLINE / WALK_IN
+        // =====================================================
+        saleSource: {
+            type: String,
+            enum: ["ONLINE", "WALK_IN"],
+            default: "ONLINE",
+            index: true
+        },
+
+        // Payment Type
+        paymentType: {
+            type: String,
+            enum: [
+                "SECURITY_DEPOSIT",
+                "RENTAL_MONTHLY",
+                "DAMAGE_CHARGE",
+                "OTHER"
+            ],
+            default: null
+        },
+
         // Order Id / Repair Id / Rental Id
         referenceId: {
             type: mongoose.Schema.Types.ObjectId,
             required: true,
             index: true
+        },
+
+        // =====================================================
+        // RAZORPAY ORDER ID
+        // Set by the backend only, when the Razorpay order is
+        // created. Used to find this payment during verify.
+        // IMPORTANT: no default value (an empty string would
+        // break the unique index).
+        // =====================================================
+        razorpayOrderId: {
+            type: String,
+            unique: true,
+            sparse: true,
+            default: undefined,
+            trim: true
         },
 
         // Receipt Number
@@ -118,13 +135,10 @@ paymentType: {
             default: ""
         },
 
-        isDeleted:{
-
-    type:Boolean,
-
-    default:false
-
-},
+        isDeleted: {
+            type: Boolean,
+            default: false
+        },
 
         // Refund Amount
         refundedAmount: {
@@ -165,9 +179,6 @@ paymentSchema.index({
     paymentFor: 1,
     referenceId: 1
 });
-
-
-
 
 
 const Payment = mongoose.model(

@@ -6,10 +6,16 @@ import Order
 
 
 // =======================================
+// CHANGE: REPLACED FUNCTION
 // CREATE RAZORPAY ORDER
-// =======================================
-// =======================================
-// CREATE RAZORPAY ORDER
+//
+// Before: took orderId AND amount from the
+// client, and only created the Razorpay order.
+//
+// Now: takes only orderId. The amount comes
+// from order.totalAmount in the DB. The
+// service also creates the Payment document
+// linked to this Razorpay order.
 // =======================================
 
 export const createRazorpayOrder = async (
@@ -19,9 +25,9 @@ export const createRazorpayOrder = async (
 
     try {
 
+        // CHANGE: amount is no longer read from the client
         const {
-            orderId,
-            amount
+            orderId
         } = req.body;
 
 
@@ -36,11 +42,6 @@ export const createRazorpayOrder = async (
         console.log(
             "ORDER ID:",
             orderId
-        );
-
-        console.log(
-            "REQUEST AMOUNT:",
-            amount
         );
 
         console.log(
@@ -87,18 +88,60 @@ export const createRazorpayOrder = async (
 
 
         // -----------------------------------
-        // VALIDATE AMOUNT
+        // CHANGE: OWNERSHIP CHECK
+        // Only the customer who owns the order
+        // can pay for it.
+        // NOTE: change "order.user" if your Order
+        // model uses a different field name.
         // -----------------------------------
 
-        const requestedAmount =
-            Number(amount);
+        if (
+            order.user &&
+            String(order.user) !==
+            String(req.user._id)
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "You are not allowed to pay for this order"
+
+            });
+
+        }
+
+
+        // -----------------------------------
+        // CHANGE: ALREADY PAID CHECK
+        // paymentId is only set by a real verify. Don't use paymentStatus here.
+        // -----------------------------------
+
+        if (order.paymentId) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Order is already paid"
+
+            });
+
+        }
+
+
+        // -----------------------------------
+        // CHANGE: AMOUNT FROM DATABASE ORDER
+        // -----------------------------------
+
+        const amount = Number(order.finalAmount);
 
 
         if (
-            !Number.isFinite(
-                requestedAmount
-            ) ||
-            requestedAmount <= 0
+            !Number.isFinite(amount) ||
+            amount <= 0
         ) {
 
             return res.status(400).json({
@@ -106,17 +149,11 @@ export const createRazorpayOrder = async (
                 success: false,
 
                 message:
-                    "Valid payment amount is required"
+                    "Invalid order amount"
 
             });
 
         }
-
-
-        const finalAmount =
-            Math.round(
-                requestedAmount * 100
-            ) / 100;
 
 
         console.log(
@@ -124,24 +161,23 @@ export const createRazorpayOrder = async (
             order.totalAmount
         );
 
-        console.log(
-            "FINAL RAZORPAY AMOUNT:",
-            finalAmount
-        );
-
 
         // -----------------------------------
-        // CREATE RAZORPAY ORDER
+        // CHANGE: CREATE RAZORPAY ORDER AND
+        // THE LINKED PAYMENT DOCUMENT
         // -----------------------------------
 
-        const razorpayOrder =
-            await paymentService.createRazorpayPaymentOrder(
+        const {
+            razorpayOrder
+        } =
+            await paymentService.createRazorpayPaymentOrder({
 
-                finalAmount,
+                order,
 
-                `order_${order._id}`
+                userId:
+                    req.user._id
 
-            );
+            });
 
 
         console.log(
@@ -152,6 +188,8 @@ export const createRazorpayOrder = async (
 
         // -----------------------------------
         // RESPONSE
+        // (same shape as before, so the
+        // frontend keeps working)
         // -----------------------------------
 
         return res.status(200).json({
@@ -174,7 +212,7 @@ export const createRazorpayOrder = async (
                 razorpayOrder.currency,
 
             paymentAmount:
-                finalAmount
+                amount
 
         });
 
@@ -203,10 +241,15 @@ export const createRazorpayOrder = async (
 };
 
 
-
-
 // =======================================
+// CHANGE: REPLACED FUNCTION
 // VERIFY RAZORPAY PAYMENT
+//
+// Before: required paymentId from the client.
+//
+// Now: takes only razorpayOrderId,
+// razorpayPaymentId and razorpaySignature.
+// The payment is found by razorpayOrderId.
 // =======================================
 
 export const verifyRazorpayPaymentController =
@@ -217,9 +260,8 @@ export const verifyRazorpayPaymentController =
 
         try {
 
+            // CHANGE: paymentId removed
             const {
-
-                paymentId,
 
                 razorpayOrderId,
 
@@ -233,19 +275,6 @@ export const verifyRazorpayPaymentController =
                 "VERIFY PAYMENT REQUEST =",
                 req.body
             );
-
-            if (!paymentId) {
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    message:
-                        "Payment ID is required"
-
-                });
-
-            }
 
             if (!razorpayOrderId) {
 
@@ -288,8 +317,6 @@ export const verifyRazorpayPaymentController =
 
             const payment =
                 await paymentService.verifyRazorpayPaymentService({
-
-                    paymentId,
 
                     razorpayOrderId,
 
@@ -337,10 +364,6 @@ export const verifyRazorpayPaymentController =
 // CREATE PAYMENT
 // =======================================
 
-// =======================================
-// CREATE PAYMENT
-// =======================================
-
 export const createPayment = async (
     req,
     res
@@ -366,9 +389,23 @@ export const createPayment = async (
         }
 
 
+        // CHANGE: razorpayOrderId is removed from the
+        // client body. Only the backend may set it
+        // (inside createRazorpayPaymentOrder), so a
+        // client can't attach a Razorpay order to a
+        // payment of its own.
+        const {
+
+            razorpayOrderId,
+
+            ...safeBody
+
+        } = req.body;
+
+
         const paymentData = {
 
-            ...req.body,
+            ...safeBody,
 
             user: userId
 
@@ -459,6 +496,7 @@ export const createPayment = async (
     }
 
 };
+
 
 // =======================================
 // GET PAYMENT BY ID
@@ -593,6 +631,8 @@ export const getAllPayments = async (
 
 // =======================================
 // PAYMENT SUCCESS
+// (unchanged; locking this route down is
+// tomorrow's task)
 // =======================================
 
 export const paymentSuccess = async (
