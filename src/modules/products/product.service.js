@@ -409,6 +409,25 @@ export const createProductService = async (
                 data.name,
 
 
+            // =============================================
+            // HSN CODE
+            //
+            // CHANGE: Added hsnCode field.
+            // Reason: productData is built field by field,
+            // so without this line the hsnCode sent from
+            // the AddProduct form would be silently dropped
+            // and never saved in the database.
+            // It is later copied into invoice items by
+            // createInvoiceFromOrder (invoice.service.js).
+            // Falls back to "" when not provided.
+            // =============================================
+
+            hsnCode:
+                data.hsnCode
+                    ? String(data.hsnCode).trim()
+                    : "",
+
+
             category:
                 data.category,
 
@@ -906,8 +925,13 @@ export const getProductService = async (
 // =====================================================
 // UPDATE PRODUCT
 // =====================================================
-
-
+//
+// NOTE (hsnCode): No change needed here.
+// `data` is passed straight to updateProductDB, so
+// hsnCode is saved automatically once the update
+// validation (product.validation.js) allows it.
+//
+// =====================================================
 
 export const updateProductService = async (
     id,

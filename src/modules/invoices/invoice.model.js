@@ -30,6 +30,13 @@ const invoiceItemSchema = new mongoose.Schema(
       default: "",
     },
 
+    // ---- ADD THIS ----
+    hsnCode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     quantity: {
       type: Number,
       required: true,
@@ -177,72 +184,72 @@ const invoiceSchema = new mongoose.Schema(
       min: 0,
     },
 
-// =========================================
-// COUPON
-// =========================================
+    // =========================================
+    // COUPON
+    // =========================================
 
-couponDiscount: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
+    couponDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-// =========================================
-// TAXABLE AMOUNT
-// =========================================
+    // =========================================
+    // TAXABLE AMOUNT
+    // =========================================
 
-taxableAmount: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
+    taxableAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-// =========================================
-// GST
-// =========================================
+    // =========================================
+    // GST
+    // =========================================
 
-gstPercentage: {
-  type: Number,
-  default: 18,
-  min: 0,
-},
+    gstPercentage: {
+      type: Number,
+      default: 18,
+      min: 0,
+    },
 
-gstAmount: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
+    gstAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-// =========================================
-// SHIPPING
-// =========================================
+    // =========================================
+    // SHIPPING
+    // =========================================
 
-shippingCharge: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
+    shippingCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-// =========================================
-// OTHER CHARGES
-// =========================================
+    // =========================================
+    // OTHER CHARGES
+    // =========================================
 
-otherCharges: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
+    otherCharges: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
 
-// =========================================
-// FINAL PAYABLE
-// =========================================
+    // =========================================
+    // FINAL PAYABLE
+    // =========================================
 
-finalAmount: {
-  type: Number,
-  default: 0,
-  min: 0,
-},
-    
+    finalAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
 
     paidAmount: {
       type: Number,

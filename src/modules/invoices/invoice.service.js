@@ -113,8 +113,25 @@ export const createInvoiceFromOrder = async (orderId) => {
   // 6. ITEMS
   // ==========================================
 
+
+  // ==========================================
+  // 6. ITEMS
+  //
+  // Each invoice item is built from the order item.
+  // The product is populated (.populate("orderItems.product")),
+  // so we copy the HSN code from the product into the item.
+  // This way the invoice keeps the HSN that was valid
+  // on the invoice date, even if the product is edited later.
+  // ==========================================
+
   const items = (order.orderItems || []).map(
     (item) => {
+      // Populated product document (or empty object if only an ID)
+      const productDoc =
+        item.product && typeof item.product === "object"
+          ? item.product
+          : {};
+
       return {
         itemType: "PRODUCT",
 
@@ -130,11 +147,20 @@ export const createInvoiceFromOrder = async (orderId) => {
 
         title:
           item.title ||
-          item.product?.title ||
+          productDoc.name ||
           "Product",
 
         description:
           item.description ||
+          "",
+
+        // ==========================================
+        // HSN CODE
+        // Copied from the product at invoice creation
+        // ==========================================
+
+        hsnCode:
+          productDoc.hsnCode ||
           "",
 
         quantity:
@@ -169,7 +195,7 @@ export const createInvoiceFromOrder = async (orderId) => {
       return (
         sum +
         Number(item.originalPrice || 0) *
-          Number(item.quantity || 1)
+        Number(item.quantity || 1)
       );
     },
     0
@@ -184,7 +210,7 @@ export const createInvoiceFromOrder = async (orderId) => {
       return (
         sum +
         Number(item.discountAmount || 0) *
-          Number(item.quantity || 1)
+        Number(item.quantity || 1)
       );
     },
     0
@@ -197,93 +223,93 @@ export const createInvoiceFromOrder = async (orderId) => {
   // const totalAmount =
   //   Number(order.totalAmount || 0);
 
-// ==========================================
-// 9. TOTAL
-// ==========================================
+  // ==========================================
+  // 9. TOTAL
+  // ==========================================
 
-// order.totalAmount = product/offer ke baad amount
-// order.finalAmount = GST + coupon + shipping ke baad
-// actual payable amount
+  // order.totalAmount = product/offer ke baad amount
+  // order.finalAmount = GST + coupon + shipping ke baad
+  // actual payable amount
 
-const totalAmount =
-  Number(
-    order.finalAmount ??
-    order.totalAmount ??
-    0
-  );
+  const totalAmount =
+    Number(
+      order.finalAmount ??
+      order.totalAmount ??
+      0
+    );
 
 
   // ==========================================
-// 9A. FINANCIAL BREAKDOWN
-// ==========================================
+  // 9A. FINANCIAL BREAKDOWN
+  // ==========================================
 
-const orderSubtotal =
-  Number(
-    order.subtotal ??
-    subtotal ??
-    0
-  );
-
-const orderOfferDiscount =
-  Number(
-    order.offerDiscount ??
-    discount ??
-    0
-  );
-
-const couponDiscount =
-  Number(
-    order.couponDiscount ??
-    0
-  );
-
-const taxableAmount =
-  Number(
-    order.taxableAmount ??
-    Math.max(
-      Number(order.totalAmount || 0) -
-        couponDiscount,
+  const orderSubtotal =
+    Number(
+      order.subtotal ??
+      subtotal ??
       0
-    )
-  );
+    );
 
-const gstPercentage =
-  Number(
-    order.gstPercentage ??
-    18
-  );
+  const orderOfferDiscount =
+    Number(
+      order.offerDiscount ??
+      discount ??
+      0
+    );
 
-const gstAmount =
-  Number(
-    order.gstAmount ??
-    (
-      taxableAmount *
-      gstPercentage
-    ) / 100
-  );
+  const couponDiscount =
+    Number(
+      order.couponDiscount ??
+      0
+    );
 
-const shippingCharge =
-  Number(
-    order.shippingCharge ??
-    0
-  );
+  const taxableAmount =
+    Number(
+      order.taxableAmount ??
+      Math.max(
+        Number(order.totalAmount || 0) -
+        couponDiscount,
+        0
+      )
+    );
 
-const otherCharges =
-  Number(
-    order.otherCharges ??
-    0
-  );
+  const gstPercentage =
+    Number(
+      order.gstPercentage ??
+      18
+    );
 
-const finalAmount =
-  Number(
-    order.finalAmount ??
-    (
-      taxableAmount +
-      gstAmount +
-      shippingCharge +
-      otherCharges
-    )
-  );
+  const gstAmount =
+    Number(
+      order.gstAmount ??
+      (
+        taxableAmount *
+        gstPercentage
+      ) / 100
+    );
+
+  const shippingCharge =
+    Number(
+      order.shippingCharge ??
+      0
+    );
+
+  const otherCharges =
+    Number(
+      order.otherCharges ??
+      0
+    );
+
+  const finalAmount =
+    Number(
+      order.finalAmount ??
+      (
+        taxableAmount +
+        gstAmount +
+        shippingCharge +
+        otherCharges
+      )
+    );
 
   // ==========================================
   // 10. PAID AMOUNT
@@ -404,94 +430,94 @@ const finalAmount =
   // };
 
   const invoiceData = {
-  invoiceNumber:
-    await generateInvoiceNumber(),
+    invoiceNumber:
+      await generateInvoiceNumber(),
 
-  order:
-    order._id,
+    order:
+      order._id,
 
-  user:
-    order.user._id,
+    user:
+      order.user._id,
 
-  invoiceFor:
-    "ORDER",
+    invoiceFor:
+      "ORDER",
 
-  referenceId:
-    order._id,
+    referenceId:
+      order._id,
 
-  orderSource,
+    orderSource,
 
-  soldBy:
-    order.soldBy?._id ||
-    null,
+    soldBy:
+      order.soldBy?._id ||
+      null,
 
-  items,
+    items,
 
-  // =========================================
-  // FINANCIAL BREAKDOWN
-  // =========================================
+    // =========================================
+    // FINANCIAL BREAKDOWN
+    // =========================================
 
-  subtotal:
-    orderSubtotal,
+    subtotal:
+      orderSubtotal,
 
-  // Offer / product discount
-  discount:
-    orderOfferDiscount,
+    // Offer / product discount
+    discount:
+      orderOfferDiscount,
 
-  // Coupon discount
-  couponDiscount:
-    couponDiscount,
+    // Coupon discount
+    couponDiscount:
+      couponDiscount,
 
-  // Amount after coupon
-  taxableAmount:
-    taxableAmount,
+    // Amount after coupon
+    taxableAmount:
+      taxableAmount,
 
-  // GST
-  gstPercentage:
-    gstPercentage,
+    // GST
+    gstPercentage:
+      gstPercentage,
 
-  gstAmount:
-    gstAmount,
+    gstAmount:
+      gstAmount,
 
-  // Shipping
-  shippingCharge:
-    shippingCharge,
+    // Shipping
+    shippingCharge:
+      shippingCharge,
 
-  // Other charges
-  otherCharges:
-    otherCharges,
+    // Other charges
+    otherCharges:
+      otherCharges,
 
-  // Original order amount after offer
-  // Keep this for backward compatibility
-  productTotalAmount:
-    Number(order.totalAmount || 0),
+    // Original order amount after offer
+    // Keep this for backward compatibility
+    productTotalAmount:
+      Number(order.totalAmount || 0),
 
-  // FINAL CUSTOMER PAYABLE
-  totalAmount:
-    finalAmount,
+    // FINAL CUSTOMER PAYABLE
+    totalAmount:
+      finalAmount,
 
-  finalAmount:
-    finalAmount,
+    finalAmount:
+      finalAmount,
 
-  paidAmount,
+    paidAmount,
 
-  balanceAmount,
+    balanceAmount,
 
-  paymentStatus:
-    order.paymentStatus,
+    paymentStatus:
+      order.paymentStatus,
 
-  paymentMethod,
+    paymentMethod,
 
-  payment:
-    payment?._id ||
-    null,
+    payment:
+      payment?._id ||
+      null,
 
-  billingAddress:
-    order.shippingAddress || {},
+    billingAddress:
+      order.shippingAddress || {},
 
-  invoiceDate:
-    new Date(),
-};
+    invoiceDate:
+      new Date(),
+  };
 
   console.log(
     "FINAL INVOICE DATA:",

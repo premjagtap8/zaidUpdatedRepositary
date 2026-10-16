@@ -22,6 +22,27 @@ export const createProductValidation = Joi.object({
         .allow("")
         .optional(),
 
+    // =================================================
+    // HSN CODE (used on tax invoices)
+    // Optional. 4, 6 or 8 digits.
+    //
+    // CHANGE: Added hsnCode field.
+    // Reason: Joi rejects unknown keys by default, so
+    // without this the AddProduct form would fail with
+    // '"hsnCode" is not allowed'.
+    // Empty string is allowed so the field stays optional.
+    // =================================================
+
+    hsnCode: Joi.string()
+        .trim()
+        .pattern(/^\d{4}(\d{2}(\d{2})?)?$/)
+        .allow("")
+        .optional()
+        .messages({
+            "string.pattern.base":
+                "HSN code must be 4, 6 or 8 digits"
+        }),
+
     category: Joi.string()
         .trim()
         .required(),
@@ -228,6 +249,25 @@ export const updateProductValidation = Joi.object({
     barcode: Joi.string()
         .trim()
         .allow(""),
+
+    // =================================================
+    // HSN CODE (used on tax invoices)
+    // Optional. 4, 6 or 8 digits.
+    //
+    // CHANGE: Added hsnCode field.
+    // Reason: Allows HSN code to be edited later from
+    // the EditProduct form. Without this, update requests
+    // containing hsnCode would be rejected by Joi.
+    // =================================================
+
+    hsnCode: Joi.string()
+        .trim()
+        .pattern(/^\d{4}(\d{2}(\d{2})?)?$/)
+        .allow("")
+        .messages({
+            "string.pattern.base":
+                "HSN code must be 4, 6 or 8 digits"
+        }),
 
     category: Joi.string()
         .trim(),
